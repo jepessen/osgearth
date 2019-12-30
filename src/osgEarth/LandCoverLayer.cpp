@@ -253,6 +253,8 @@ LandCoverLayer::readMetaImage(MetaImage& metaImage, const TileKey& key, int s, i
     return false;
 }
 
+//#define USE_RGB
+
 GeoImage
 LandCoverLayer::createImageImplementation(const TileKey& key, ProgressCallback* progress) const
 {
@@ -273,14 +275,26 @@ LandCoverLayer::createImageImplementation(const TileKey& key, ProgressCallback* 
         if (!img.valid())
             return img;
 
+#ifdef USE_RGB
+        GLenum pixelFormat = GL_RGB;
+        GLenum dataType = GL_UNSIGNED_BYTE;
+        GLenum texFormat = GL_RGB8;
+        float noDataValue = 0;
+#else
+        GLenum pixelFormat = GL_RED;
+        GLenum dataType = GL_FLOAT;
+        GLenum texFormat = GL_R16F;
+        float noDataValue = NO_DATA_VALUE;
+#endif
+
         osg::ref_ptr<osg::Image> output = new osg::Image();
         output->allocateImage(
             getTileSize(),
             getTileSize(),
             1,
-            GL_RED,
-            GL_FLOAT);
-        output->setInternalTextureFormat(GL_R16F);
+            pixelFormat,
+            dataType);
+        output->setInternalTextureFormat(texFormat);
 
         ImageUtils::PixelReader read(img.getImage());
         ImageUtils::PixelWriter write(output.get());
@@ -310,7 +324,7 @@ LandCoverLayer::createImageImplementation(const TileKey& key, ProgressCallback* 
 
                 if (!wrotePixel)
                 {
-                    pixel.r() = NO_DATA_VALUE;
+                    pixel.r() = noDataValue;
                     write(pixel, s, t);
                 }
             }
@@ -338,14 +352,24 @@ LandCoverLayer::createFractalEnhancedImage(const TileKey& key, ProgressCallback*
 {
     MetaImage metaImage;
 
+#ifdef USE_RGB
+    GLenum pixelFormat = GL_RGB;
+    GLenum dataType = GL_UNSIGNED_BYTE;
+    GLenum texFormat = GL_RGB8;
+#else
+    GLenum pixelFormat = GL_RED;
+    GLenum dataType = GL_FLOAT;
+    GLenum texFormat = GL_R16F;
+#endif
+
     // Allocate the working image:
     osg::ref_ptr<osg::Image> workspace = new osg::Image();
     workspace->allocateImage(
         getTileSize() + 3,
         getTileSize() + 3,
         1,
-        GL_RED,
-        GL_FLOAT);
+        pixelFormat,
+        dataType);
     ImageUtils::PixelWriter writeToWorkspace(workspace.get());
     ImageUtils::PixelReader readFromWorkspace(workspace.get());
 
@@ -355,9 +379,9 @@ LandCoverLayer::createFractalEnhancedImage(const TileKey& key, ProgressCallback*
         getTileSize(),
         getTileSize(),
         1,
-        GL_RED,
-        GL_FLOAT);
-    output->setInternalTextureFormat(GL_R16F);
+        pixelFormat,
+        dataType);
+    output->setInternalTextureFormat(texFormat);
 
     Random prng(key.getTileX()*key.getTileY()*key.getLOD());
 
@@ -375,6 +399,10 @@ LandCoverLayer::createFractalEnhancedImage(const TileKey& key, ProgressCallback*
     const osg::Vec4 water(W,W,W,1);
     float k0,k1,k2,k3;
     unsigned beachLOD = 14; //13;
+
+    float a0, a1, a2, a3;
+    float b0, b1, b2, b3;
+    osg::Vec4 apixel, bpixel;
 
     // First pass: loop over the grid and populate even pixels with
     // values from the ancestors.
@@ -407,7 +435,10 @@ LandCoverLayer::createFractalEnhancedImage(const TileKey& key, ProgressCallback*
                 readFromWorkspace(p0, s - 1, t - 1); k0=p0.r();
                 readFromWorkspace(p1, s + 1, t - 1); k1=p1.r();
                 readFromWorkspace(p2, s + 1, t + 1); k2=p2.r();
-                readFromWorkspace(p3, s - 1, t + 1); k3=p3.r();   
+                readFromWorkspace(p3, s - 1, t + 1); k3=p3.r();
+
+                a0 = p0.r(), a1 = p1.r(), a2 = p2.r(), a3 = p3.r();
+                b0 = p0.g(), b1 = p1.g(), b2 = p2.g(), b3 = p3.g();
 
                 if (generateBeach && key.getLOD()==beachLOD)
                 {
@@ -435,6 +466,35 @@ LandCoverLayer::createFractalEnhancedImage(const TileKey& key, ProgressCallback*
                 }
                 else
                 {
+#if 0
+                    // a component:
+                    // three the same
+                    if (a0==a1 && a1==a2 && a2 != a3) apixel = p0;
+                    else if (a1==a2 && a2==a3 && a3 != a0) apixel = p1;
+                    else if (a2==a3 && a3==a0 && a0 != a1) apixel = p2;
+                    else if (a3==a0 && a0==a1 && a1 != a2) apixel = p3;
+
+                    // continuations
+                    else if (a0==a2 && a0!=a1 && a0!=a3) apixel=p0;
+                    else if (a1==a3 && a1!=a2 && a1!=a0) apixel=p1;
+
+                    // all else, rando.
+                    else apixel = (r==0)? p0 : (r==1)? p1 : (r==2)? p2 : p3;
+
+                    // b component:
+                    if (b0==b1 && b1==b2 && b2 != b3) bpixel = p0;
+                    else if (b1==a2 && b2==b3 && b3 != b0) bpixel = p1;
+                    else if (b2==a3 && b3==b0 && b0 != b1) bpixel = p2;
+                    else if (b3==a0 && b0==b1 && b1 != b2) bpixel = p3;
+
+                    // continuations
+                    else if (b0==b2 && b0!=b1 && b0!=b3) bpixel=p0;
+                    else if (b1==b3 && b1!=b2 && b1!=b0) bpixel=p1;
+
+                    // all else, rando.
+                    else bpixel = (r==0)? p0 : (r==1)? p1 : (r==2)? p2 : p3;
+
+#else
                     // three the same
                     if (k0==k1 && k1==k2 && k2 != k3) pixel = p0;
                     else if (k1==k2 && k2==k3 && k3 != k0) pixel = p1;
@@ -447,7 +507,9 @@ LandCoverLayer::createFractalEnhancedImage(const TileKey& key, ProgressCallback*
 
                     // all else, rando.
                     else pixel = (r==0)? p0 : (r==1)? p1 : (r==2)? p2 : p3;
+#endif
                 }
+
                 writeToWorkspace(pixel, s, t);
             }
         }

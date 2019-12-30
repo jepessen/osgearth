@@ -1,0 +1,159 @@
+<splat_catalog>
+    <primitives>
+        <primitive name="rock">
+            <lod>
+                <diffuse>H:/data/textures/freepbr.com/holey-rock1-albedo.png</diffuse>
+                <height>H:/data/textures/freepbr.com/holey-rock1-height.png</height>
+                <normal>H:/data/textures/freepbr.com/holey-rock1-normal-ue.png</normal>
+                <roughness>H:/data/textures/freepbr.com/holey-rock1-roughness.png</roughness>
+                <ao>H:/data/textures/freepbr.com/holey-rock1-ao.png</ao>
+            </lod>
+        </primitive>
+        <primitive name="water">
+            <lod>
+                <diffuse>../../data/splat/water.jpg</diffuse>
+                <smoothness>../../data/splat/water_s.png</smoothness>
+            </lod>
+        </primitive>
+        <primitive name="dirt">
+            <lod>
+                <diffuse>H:/data/textures/freepbr.com/sandyground1_Base_Color.png</diffuse>
+                <height>H:/data/textures/freepbr.com/sandyground1_Height.png</height>
+                <normal>H:/data/textures/freepbr.com/sandyground1_Normal.png</normal>
+                <roughness>H:/data/textures/freepbr.com/sandyground1_Roughness.png</roughness>
+                <ao>H:/data/textures/freepbr.com/sandyground1_Ambient_Occlusion.png</ao>
+            </lod>
+        </primitive>
+        <primitive name="grass">
+            <lod>
+                <diffuse>H:/data/textures/freepbr.com/grass1-albedo3.png</diffuse>
+                <height>H:/data/textures/freepbr.com/grass1-height.png</height>
+                <normal>H:/data/textures/freepbr.com/grass1-normal1-dx.png</normal>
+                <roughness>H:/data/textures/freepbr.com/grass1-rough.png</roughness>
+                <ao>H:/data/textures/freepbr.com/grass1-ao.png</ao>
+            </lod>
+        </primitive>
+        <primitive name="forestfloor">
+            <lod>
+                <diffuse>H:/data/textures/freepbr.com/grass1-albedo3.png</diffuse>
+                <height>H:/data/textures/freepbr.com/grass1-height.png</height>
+                <normal>H:/data/textures/freepbr.com/grass1-normal1-dx.png</normal>
+                <roughness>H:/data/textures/freepbr.com/grass1-rough.png</roughness>
+                <ao>H:/data/textures/freepbr.com/grass1-ao.png</ao>
+            </lod>
+        </primitive>
+        <primitive name="sand">
+            <lod>
+                <diffuse>H:/data/textures/freepbr.com/sandyground1_Base_Color.png</diffuse>
+                <height>H:/data/textures/freepbr.com/sandyground1_Height.png</height>
+                <normal>H:/data/textures/freepbr.com/sandyground1_Normal.png</normal>
+                <roughness>H:/data/textures/freepbr.com/sandyground1_Roughness.png</roughness>
+                <ao>H:/data/textures/freepbr.com/sandyground1_Ambient_Occlusion.png</ao>
+            </lod>
+        </primitive>
+        <primitive name="tundra">
+            <lod>
+                <diffuse>H:/data/textures/freepbr.com/iced-over-ground7-albedo.png</diffuse>
+                <height>H:/data/textures/freepbr.com/iced-over-ground7-Height.png</height>
+                <normal>H:/data/textures/freepbr.com/iced-over-ground7-Normal-dx.png</normal>
+                <roughness>H:/data/textures/freepbr.com/iced-over-ground7-Roughness.png</roughness>
+                <ao>H:/data/textures/freepbr.com/iced-over-ground7-ao.png</ao>
+            </lod>
+        </primitive>
+    </primitives>
+
+    <classes>
+        <class name="water">
+            <layers>
+                <layer primitive="water">
+                </layer>
+            </layers>
+        </class>
+        <class name="tundra">
+            <layers>
+                <layer primitive="rock">
+                </layer>
+                <layer primitive="tundra">
+                    under(slope, 0.5, 0.4) * noise*2
+                </layer>
+            </layers>
+        </class>
+        <class name="forest">
+            <layers>
+                <layer primitive="forestfloor">
+                </layer>
+                <layer primitive="grass">
+                    (1.0-density)*noise
+                </layer>
+                <layer primitive="rock">
+                    over(slope, 0.5, 0.5)
+                </layer>
+            </layers>
+        </class>
+        <class name="grassland">
+            <layers>
+                <layer primitive="rock">
+                </layer>
+                <layer primitive="grass">
+                    under(slope, 0.4, 0.3) *
+                    under(elevation, 2500, 500) *
+                    under(curvature, 0.8, 0.1);
+                </layer>
+                <layer primitive="dirt">
+                    1.0-density;
+                </layer>
+            </layers>
+        </class>
+        <class name="cropland">
+            <layers>
+                <layer primitive="dirt">
+                </layer>
+                <layer primitive="grass">
+                    under(slope, 0.4, 0.3) *
+                    under(elevation, 2500, 500) *
+                    under(curvature, 0.8, 0.1) *
+                    density;
+                </layer>
+            </layers>
+        </class>
+        <class name="swamp">
+            <layers>
+                <layer primitive="water">
+                </layer>
+                <layer primitive="grass">
+                    under(slope, 0.4, 0.3) * density;
+                </layer>
+            </layers>
+        </class>
+        <class name="desert">
+            <layers>
+                <layer primitive="rock">
+                </layer>
+                <layer primitive="sand">
+                    under(slope, 0.3, 0.3) * density * noise*1.5;
+                </layer>
+            </layers>
+        </class>
+        <class name="barren">
+            <layers>
+                <layer primitive="rock">
+                </layer>
+                <layer primitive="dirt">
+                    1.0-density*noise
+                </layer>
+            </layers>
+        </class>
+        <class name="savanna">
+            <layers>
+                <layer primitive="dirt">
+                </layer>
+                <layer primitive="grass">
+                    (1.0-slope)*noise*1.5
+                </layer>
+                <layer primitive="tundra">
+                    over(elevation, 2900, 1000) * noise
+                </layer>
+            </layers>
+        </class>
+    </classes>
+</splat_catalog>

@@ -25,6 +25,7 @@
 #include "Export"
 #include "Coverage"
 #include "Zone"
+#include "SplatCatalog"
 #include <osgEarth/VisibleLayer>
 #include <osgEarth/LayerReference>
 #include <osgEarth/LandCoverLayer>
@@ -96,7 +97,7 @@ namespace osgEarth { namespace Splat
 
         void buildStateSets();
 
-        void aaa();
+        void installZoneShader(const SplatCatalog* catalog, osg::StateSet* stateset) const;
 
         struct ZoneSelector : public Layer::TraversalCallback
         {

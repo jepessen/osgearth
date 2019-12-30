@@ -44,7 +44,8 @@ namespace osgEarth { namespace SimpleSky
 		  _sunVisible(true),
           _moonVisible(true),
           _starsVisible(true),
-          _atmosphereVisible(true)
+          _atmosphereVisible(true),
+          _pbr(true)
         {
             setDriver( "simple" );
             fromConfig( _conf );
@@ -53,9 +54,14 @@ namespace osgEarth { namespace SimpleSky
 
     public: // properties
 
-        /** Use advanced atmospheric lighting on the terrain (instead of simple shading) */
+        //! Use advanced atmospheric lighting on the terrain (instead of simple shading)
         optional<bool>& atmosphericLighting() { return _atmosphericLighting; }
         const optional<bool>& atmosphericLighting() const { return _atmosphericLighting; }
+
+        //! Whether to use a PBR lighting model (as opposed to ONeil lighting model)
+        //! when atmosphericLighting is true. (default=true)
+        optional<bool>& usePBR() { return _pbr; }
+        const optional<bool>& usePBR() const { return _pbr; }
 
         /** Exposure factor for simulated HDR ground lighting. Default is in CTOR */
         optional<float>& exposure() { return _exposure; }
@@ -119,6 +125,7 @@ namespace osgEarth { namespace SimpleSky
             conf.set("atmosphere_visible", _atmosphereVisible);
             conf.set("moon_scale", _moonScale);
             conf.set("moon_image", _moonImageURI);
+            conf.set("pbr", _pbr);
             return conf;
         }
 
@@ -142,6 +149,7 @@ namespace osgEarth { namespace SimpleSky
             conf.get("atmosphere_visible", _atmosphereVisible);
             conf.get("moon_scale", _moonScale);
             conf.get("moon_image", _moonImageURI);
+            conf.get("pbr", _pbr);
         }
 
         optional<bool>        _atmosphericLighting;
@@ -156,6 +164,7 @@ namespace osgEarth { namespace SimpleSky
         optional<bool>        _atmosphereVisible;
         optional<float>       _moonScale;
         optional<URI>         _moonImageURI;
+        optional<bool>        _pbr;
     };
 
 } } // namespace osgEarth::SimpleSky

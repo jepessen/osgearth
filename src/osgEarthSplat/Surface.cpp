@@ -92,6 +92,7 @@ Surface::loadTextures(const LandCoverDictionary* landCoverDict, const osgDB::Opt
 
 namespace
 {
+#if 0
     struct LOD {
         LOD() : primary(-1.0f), material(-1.0f), detail(-1.0f), brightness(1.0f), contrast(1.0f), threshold(0.0f), slope(0.0f) { }
         float primary, material, detail, brightness, contrast, threshold, slope;
@@ -115,11 +116,13 @@ namespace
                 lod.slope = data._detail->_slope.get();
         }
     }
+#endif
 }
 
 osg::Texture*
 Surface::createLUTBuffer(const LandCoverDictionary* landCoverDict) const
 {
+#if 0
     typedef LOD CoverageClass[NUM_LODS];
 
     typedef CoverageClass LUT[NUM_CLASSES];
@@ -209,6 +212,8 @@ Surface::createLUTBuffer(const LandCoverDictionary* landCoverDict) const
     ShaderGenerator::setIgnoreHint(buf, true);
 
     return buf;
+#endif
+    return NULL;
 }
 
 void

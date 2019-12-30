@@ -64,42 +64,79 @@ SplatDetailData::getConfig() const
 
 //............................................................................
 
-SplatRangeData::SplatRangeData() :
-_diffuseTextureIndex( -1 ),
-_materialTextureIndex( -1 )
+SplatPrimitiveLOD::SplatPrimitiveLOD() :
+    _textureAtlasIndex(-1),
+    _maxLevel(INT_MAX)
 {
     //nop
 }
 
-SplatRangeData::SplatRangeData(const Config& conf) :
-    _diffuseTextureIndex( -1 ),
-    _materialTextureIndex( -1 )
+SplatPrimitiveLOD::SplatPrimitiveLOD(const Config& conf) :
+    _textureAtlasIndex(-1)
 {
-    conf.get("max_lod",    _maxLOD);
-    conf.get("image",      _imageURI);
-    conf.get("normal",     _normalURI);
-    conf.get("model",      _modelURI);
-    conf.get("modelCount", _modelCount);
-    conf.get("modelLevel", _modelLevel);
-
-    if ( conf.hasChild("detail") )
-        _detail = SplatDetailData(conf.child("detail"));
+    conf.get("max_level", _maxLevel);
+    conf.get("diffuse", _diffuseURI);
+    conf.get("height", _heightURI);
+    conf.get("normal", _normalURI);
+    conf.get("smoothness", _smoothURI);
+    conf.get("roughness", _roughURI);
+    conf.get("ao", _aoURI);
 }
 
 Config
-SplatRangeData::getConfig() const
+SplatPrimitiveLOD::getConfig() const
 {
     Config conf;
-    conf.set("max_lod",    _maxLOD);
-    conf.set("image",      _imageURI);
-    conf.set("normal",     _normalURI);
-    conf.set("model",      _modelURI);
-    conf.set("modelCount", _modelCount);
-    conf.set("modelLevel", _modelLevel);
-    if ( _detail.isSet() )
-        conf.set( "detail", _detail->getConfig() );
-
+    conf.set("max_level", _maxLevel);
+    conf.set("diffuse", _diffuseURI);
+    conf.set("height", _heightURI);
+    conf.set("normal", _normalURI);
+    conf.set("smoothness", _smoothURI);
+    conf.set("roughness", _roughURI);
+    conf.set("ao", _aoURI);
     return conf;
+}
+
+//............................................................................
+
+const SplatPrimitiveLOD*
+SplatPrimitiveLODVector::getLOD(int lod) const
+{
+    for(const_iterator i = begin(); i != end(); ++i)
+    {
+        if (i->_maxLevel.get() > lod)
+            return &(*i);
+    }
+    return !empty()? &(*rbegin()) : NULL;
+}
+
+//............................................................................
+
+SplatPrimitive::SplatPrimitive(const Config& conf)
+{
+    conf.get("name", _name);
+    ConfigSet lods = conf.children("lod");
+    for(ConfigSet::const_iterator lod = lods.begin();
+        lod != lods.end();
+        ++lod)
+    {
+        _lods.push_back(SplatPrimitiveLOD(*lod));
+    }
+}
+
+Config
+SplatPrimitive::getConfig() const
+{
+    //TODO
+    return Config();
+}
+
+//............................................................................
+
+SplatClassLayer::SplatClassLayer(const Config& conf)
+{
+    conf.get("primitive", _primitiveName);
+    _glslExpression = conf.value();
 }
 
 //............................................................................
@@ -112,36 +149,20 @@ SplatClass::SplatClass()
 SplatClass::SplatClass(const Config& conf)
 {
     _name = conf.value("name");
-
-    if ( conf.hasChild("range") )
+    const ConfigSet& layers = conf.child("layers").children();
+    for(ConfigSet::const_iterator i = layers.begin();
+        i != layers.end();
+        ++i)
     {
-        ConfigSet children = conf.children("range");
-
-        // read the data definitions in order:
-        for(ConfigSet::const_iterator i = children.begin(); i != children.end(); ++i)
-        {
-            if ( !i->empty() )
-            {
-                _ranges.push_back(SplatRangeData(*i));
-            }
-        }
-    }
-    else
-    {
-        // just one.
-        _ranges.push_back( SplatRangeData(conf) );
+        _layers.push_back(SplatClassLayer(*i));
     }
 }
 
 Config
 SplatClass::getConfig() const
 {
-    Config conf( _name );
-    for(SplatRangeDataVector::const_iterator i = _ranges.begin(); i != _ranges.end(); ++i)
-    {
-        conf.add( "range", i->getConfig() );
-    }
-    return conf;
+    //TODO
+    return Config();
 }
 
 //............................................................................
@@ -157,6 +178,14 @@ SplatCatalog::fromConfig(const Config& conf)
     conf.get("version",     _version);
     conf.get("name",        _name);
     conf.get("description", _description);
+
+    const ConfigSet& primitives = conf.child("primitives").children();
+    for(ConfigSet::const_iterator i = primitives.begin();
+        i != primitives.end();
+        ++i)
+    {
+        _primitives[i->value("name")] = SplatPrimitive(*i);
+    }
 
     Config classesConf = conf.child("classes");
     if ( !classesConf.empty() )
@@ -192,6 +221,20 @@ SplatCatalog::getConfig() const
     return conf;
 }
 
+const SplatClass*
+SplatCatalog::getClass(const std::string& name) const
+{
+    SplatClassMap::const_iterator i = _classes.find(name);
+    return i != _classes.end()? &i->second : NULL;
+}
+
+const SplatPrimitive*
+SplatCatalog::getPrimitive(const std::string& name) const
+{
+    SplatPrimitiveMap::const_iterator i = _primitives.find(name);
+    return i != _primitives.end()? &i->second : NULL;
+}
+
 namespace
 {
     osg::Image* loadImage(const URI& uri, const osgDB::Options* dbOptions, osg::Image* firstImage)
@@ -205,6 +248,14 @@ namespace
             if ( firstImage == 0L )
             {
                 firstImage = result.getImage();
+
+                // require rgba8 so we can encode the heightmap in the alpha channel
+                if (firstImage->getPixelFormat() != GL_RGBA)
+                {
+                    osg::ref_ptr<osg::Image> rgba = ImageUtils::convertToRGBA8(firstImage);
+                    firstImage = rgba.get();
+                    return rgba.release();
+                }
             }
             else
             {
@@ -254,146 +305,163 @@ bool
 SplatCatalog::createSplatTextureDef(const osgDB::Options* dbOptions,
                                     SplatTextureDef&      out)
 {
-    // Reset all texture indices to default
-    for(SplatClassMap::iterator i = _classes.begin(); i != _classes.end(); ++i)
+    // Reset all texture atlas indices to default
+    unsigned atlasIndex = 0;
+    unsigned s = 0, t = 0;
+    std::vector< osg::ref_ptr<osg::Image> > diffuseImages;
+    osg::Image* firstImage = NULL;
+
+    for(SplatPrimitiveMap::iterator i = _primitives.begin();
+        i != _primitives.end();
+        ++i)
     {
-        SplatClass& c = i->second;
-        for(SplatRangeDataVector::iterator range = c._ranges.begin(); range != c._ranges.end(); ++range)
+        SplatPrimitive& primitive = i->second;
+        for(SplatPrimitiveLODVector::iterator lod = primitive._lods.begin();
+            lod != primitive._lods.end();
+            ++lod)
         {
-            range->_diffuseTextureIndex = -1;
-            range->_materialTextureIndex = -1;
-            if ( range->_detail.isSet() )
+            lod->_textureAtlasIndex = -1;
+
+            if (lod->_diffuseURI.isSet())
             {
-                range->_detail->_textureIndex = -1;
+                osg::ref_ptr<osg::Image> diffuse = loadImage(lod->_diffuseURI.get(), dbOptions, firstImage);
+                if (diffuse.valid())
+                {
+                    if (firstImage == NULL)
+                        firstImage = diffuse.get();
+
+                    // Encode the height value in the alpha channel.
+                    osg::ref_ptr<osg::Image> heightmap = loadImage(lod->_heightURI.get(), dbOptions, firstImage);
+                    ImageUtils::PixelReader readHeight(heightmap.get());
+                    ImageUtils::PixelReader readRGBH(diffuse.get());
+                    ImageUtils::PixelWriter writeRGBH(diffuse.get());
+                    osg::Vec4 rgbh, height;
+
+                    for(int t=0; t<readRGBH.t(); ++t)
+                    {
+                        for(int s=0; s<readRGBH.s(); ++s)
+                        {
+                            readRGBH(rgbh, s, t);
+                            if (heightmap.valid())
+                            {
+                                readHeight(height, s, t);
+                                rgbh.a() = height.r();
+                            }
+                            else
+                            {
+                                rgbh.a() = 0.0;
+                            }
+                            writeRGBH(rgbh, s, t);
+                        }
+                    }
+
+                    lod->_textureAtlasIndex = diffuseImages.size();
+                    diffuseImages.push_back(diffuse.get());
+
+                    osg::ref_ptr<osg::Image> material;
+                    material = new osg::Image();
+                    material->allocateImage(firstImage->s(), firstImage->t(), 1, firstImage->getPixelFormat(), firstImage->getDataType());
+                    material->setInternalTextureFormat(GL_RGBA8);
+
+                    osg::ref_ptr<osg::Image> normal = loadImage(lod->_normalURI.get(), dbOptions, firstImage);
+                    osg::ref_ptr<osg::Image> smooth = loadImage(lod->_smoothURI.get(), dbOptions, firstImage);
+                    osg::ref_ptr<osg::Image> rough = loadImage(lod->_roughURI.get(), dbOptions, firstImage);
+                    osg::ref_ptr<osg::Image> ao = loadImage(lod->_aoURI.get(), dbOptions, firstImage);
+
+                    ImageUtils::PixelReader readNormal(normal.get());
+                    ImageUtils::PixelReader readSmooth(smooth.get());
+                    ImageUtils::PixelReader readRough(rough.get());
+                    ImageUtils::PixelReader readAO(ao.get());
+
+                    ImageUtils::PixelWriter writeMaterial(material.get());
+
+                    osg::Vec4 input, output;
+                    for(int t=0; t<material->t(); ++t)
+                    {
+                        for(int s=0; s<material->s(); ++s)
+                        {
+                            // (normal X/2+1, normal Y/2+1, roughness, AO)
+                            output.set(0.5, 0.5, 0.25, 0.20);
+
+                            if (normal.valid())
+                            {
+                                readNormal(input, s, t);
+                                output.x() = input.x(), output.y() = input.y();
+                            }
+
+                            if (smooth.valid())
+                            {
+                                readSmooth(input, s, t);
+                                output.z() = input.r();
+                            }
+                            else if (rough.valid())
+                            {
+                                readRough(input, s, t);
+                                output.z() = 1.0-input.r();
+                            }
+                            // custom default smoothness for water
+                            else if (i->first == "water") output.z() = 0.65;
+
+                            if (ao.valid())
+                            {
+                                readAO(input, s, t);
+                                output.w() = input.r();
+                            }
+
+                            writeMaterial(output, s, t);
+                        }
+                    }
+
+                    diffuseImages.push_back(material.get());
+                }
             }
         }
-    }
-
-    typedef UnorderedMap<URI, int> ImageIndexTable; // track images to prevent dupes
-    ImageIndexTable imageIndices;
-    std::vector< osg::ref_ptr<osg::Image> > imagesInOrder;
-    int index = 0;
-    osg::Image* firstImage  = 0L;
-
-    // Load all referenced images in the catalog, and assign each a unique index.
-    for(SplatClassMap::iterator i = _classes.begin(); i != _classes.end(); ++i)
-    {
-        SplatClass& c = i->second;
-
-        for(SplatRangeDataVector::iterator range = c._ranges.begin(); range != c._ranges.end(); ++range)
-        {
-            // Load the main image and assign it an index:
-            if (range->_imageURI.isSet())
-            {
-                int texIndex = -1;
-                ImageIndexTable::iterator k = imageIndices.find(range->_imageURI.get());
-                if ( k == imageIndices.end() )
-                {
-                    osg::ref_ptr<osg::Image> image = loadImage( range->_imageURI.get(), dbOptions, firstImage );
-                    if ( image.valid() )
-                    {
-                        if ( !firstImage )
-                            firstImage = image.get();
-
-                        imageIndices[range->_imageURI.get()] = texIndex = index++;
-                        imagesInOrder.push_back( image.get() );
-                    }
-                }
-                else
-                {
-                    texIndex = k->second;
-                }
-                range->_diffuseTextureIndex = texIndex;
-            }
-
-#if 1
-            // Load the material texture(s) and assign to an index:
-            if (range->_normalURI.isSet())
-            {
-                int texIndex = -1;
-                ImageIndexTable::iterator k = imageIndices.find(range->_normalURI.get());
-                if ( k == imageIndices.end() )
-                {
-                    osg::ref_ptr<osg::Image> image = loadImage( range->_normalURI.get(), dbOptions, firstImage );
-                    if ( image.valid() )
-                    {
-                        if ( !firstImage )
-                            firstImage = image.get();
-
-                        imageIndices[range->_normalURI.get()] = texIndex = index++;
-                        imagesInOrder.push_back( image.get() );
-                    }
-                }
-                else
-                {
-                    texIndex = k->second;
-                }
-                range->_materialTextureIndex = texIndex;
-            }
-#endif
-
-            // Load the detail texture if it exists:
-            if (range->_detail.isSet() &&
-                range->_detail->_imageURI.isSet())
-            {
-                int texIndex = -1;
-                ImageIndexTable::iterator k = imageIndices.find(range->_detail->_imageURI.get());
-                if ( k == imageIndices.end() )
-                {
-                    osg::ref_ptr<osg::Image> image = loadImage( range->_detail->_imageURI.get(), dbOptions, firstImage );
-                    if ( image.valid() )
-                    {
-                        if ( !firstImage )
-                            firstImage = image.get();
-            
-                        imageIndices[range->_detail->_imageURI.get()] = texIndex = index++;
-                        imagesInOrder.push_back( image.get() );
-                    }
-                }
-                else
-                {
-                    texIndex = k->second;
-                }
-                range->_detail->_textureIndex = texIndex;
-            }
-        }
-    }
-
-    // Next, go through the classes and build the splat lookup table.
-    for(SplatClassMap::const_iterator i = _classes.begin(); i != _classes.end(); ++i)
-    {
-        const SplatClass& c = i->second;
-        out._splatLUT[c._name] = c._ranges;
     }
 
     // Create the texture array.
-    if ( imagesInOrder.size() > 0 && firstImage )
+    if ( diffuseImages.size() > 0 )
     {
-        out._texture = new osg::Texture2DArray();
-        out._texture->setTextureSize( firstImage->s(), firstImage->t(), imagesInOrder.size() );
-        out._texture->setWrap( osg::Texture::WRAP_S, osg::Texture::REPEAT );
-        out._texture->setWrap( osg::Texture::WRAP_T, osg::Texture::REPEAT );
-        out._texture->setFilter( osg::Texture::MIN_FILTER, osg::Texture::LINEAR_MIPMAP_LINEAR );
-        out._texture->setFilter( osg::Texture::MAG_FILTER, osg::Texture::LINEAR );
-        //out._texture->setResizeNonPowerOfTwoHint( false );
-        out._texture->setMaxAnisotropy( 4.0f );
+        osg::Image* first = diffuseImages.front();
 
-        for(unsigned i=0; i<imagesInOrder.size(); ++i)
+        out._rgbhTextureAtlas = new osg::Texture2DArray();
+        out._rgbhTextureAtlas->setTextureSize( first->s(), first->t(), diffuseImages.size() );
+        out._rgbhTextureAtlas->setWrap( osg::Texture::WRAP_S, osg::Texture::REPEAT );
+        out._rgbhTextureAtlas->setWrap( osg::Texture::WRAP_T, osg::Texture::REPEAT );
+        out._rgbhTextureAtlas->setFilter( osg::Texture::MIN_FILTER, osg::Texture::LINEAR_MIPMAP_LINEAR );
+        out._rgbhTextureAtlas->setFilter( osg::Texture::MAG_FILTER, osg::Texture::LINEAR );
+        out._rgbhTextureAtlas->setMaxAnisotropy( 4.0f );
+
+        for(unsigned i=0; i<diffuseImages.size(); ++i)
         {
-            out._texture->setImage( i, imagesInOrder[i].get() );
+            out._rgbhTextureAtlas->setImage( i, diffuseImages[i].get() );
         }
 
+        //if (materialImages.size() > 0)
+        //{
+        //    //out._materialTextureAtlas = new osg::Texture2DArray();
+        //    //out._materialTextureAtlas->setTextureSize( first->s(), first->t(), diffuseImages.size() );
+        //    //out._materialTextureAtlas->setWrap( osg::Texture::WRAP_S, osg::Texture::REPEAT );
+        //    //out._materialTextureAtlas->setWrap( osg::Texture::WRAP_T, osg::Texture::REPEAT );
+        //    //out._materialTextureAtlas->setFilter( osg::Texture::MIN_FILTER, osg::Texture::LINEAR_MIPMAP_LINEAR );
+        //    //out._materialTextureAtlas->setFilter( osg::Texture::MAG_FILTER, osg::Texture::LINEAR );
+        //    //out._materialTextureAtlas->setMaxAnisotropy( 4.0f );
+
+        //    for(unsigned i=0; i<materialImages.size(); ++i)
+        //    {
+        //        out._rgbhTextureAtlas->setImage( diffuseImages.size()+i, materialImages[i].get() );
+        //    }
+        //}
+
         OE_INFO << LC << "Catalog \"" << this->name().get()
-            << "\" texture size = "<< imagesInOrder.size()
+            << "\" atlas size = "<< diffuseImages.size()
             << std::endl;
     }
 
-    return out._texture.valid();
+    return out._rgbhTextureAtlas.valid();
 }
 
 SplatCatalog*
-SplatCatalog::read(const URI&            uri,
-                   const osgDB::Options* options)
+SplatCatalog::read(const URI& uri, const osgDB::Options* options)
 {
     osg::ref_ptr<SplatCatalog> catalog;
 
@@ -401,7 +469,7 @@ SplatCatalog::read(const URI&            uri,
     if ( doc.valid() )
     {
         catalog = new SplatCatalog();
-        catalog->fromConfig( doc->getConfig().child("catalog") );
+        catalog->fromConfig( doc->getConfig().child("splat_catalog") );
         if ( catalog->empty() )
         {
             OE_WARN << LC << "Catalog is empty! (" << uri.full() << ")\n";
@@ -427,8 +495,11 @@ SplatCatalog::read(const URI&            uri,
 void
 SplatTextureDef::resizeGLObjectBuffers(unsigned maxSize)
 {
-    if (_texture.valid())
-        _texture->resizeGLObjectBuffers(maxSize);
+    if (_rgbhTextureAtlas.valid())
+        _rgbhTextureAtlas->resizeGLObjectBuffers(maxSize);
+
+    if (_materialTextureAtlas.valid())
+        _materialTextureAtlas->resizeGLObjectBuffers(maxSize);
 
     if (_splatLUTBuffer.valid())
         _splatLUTBuffer->resizeGLObjectBuffers(maxSize);
@@ -437,8 +508,11 @@ SplatTextureDef::resizeGLObjectBuffers(unsigned maxSize)
 void
 SplatTextureDef::releaseGLObjects(osg::State* state) const
 {
-    if (_texture.valid())
-        _texture->releaseGLObjects(state);
+    if (_rgbhTextureAtlas.valid())
+        _rgbhTextureAtlas->releaseGLObjects(state);
+
+    if (_materialTextureAtlas.valid())
+        _materialTextureAtlas->releaseGLObjects(state);
 
     if (_splatLUTBuffer.valid())
         _splatLUTBuffer->releaseGLObjects(state);

@@ -8,6 +8,9 @@ using namespace osgEarth::Splat;
 
 SplattingShaders::SplattingShaders()
 {
+    SplatLayer = "SplatLayer.glsl";
+    _sources[SplatLayer] = "@SplatLayer.glsl@";
+
     Types = "Splat.types.glsl";
     _sources[Types] = "@Splat.types.glsl@";
 

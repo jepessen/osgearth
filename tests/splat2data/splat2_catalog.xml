@@ -1,0 +1,148 @@
+<splat_catalog>
+    <primitives>
+        <primitive name="rock">
+            <lod>
+                <diffuse>rock_dark.jpg</diffuse>
+                <height>rock_dark_h.png</height>
+                <normal>rock_dark_n.png</normal>
+                <smoothness>rock_dark_s.png</smoothness>
+                <ao>rock_dark_a.png</ao>
+            </lod>
+        </primitive>
+        <primitive name="water">
+            <lod>
+                <diffuse>water.jpg</diffuse>
+            </lod>
+        </primitive>
+        <primitive name="dirt">
+            <lod>
+                <diffuse>savanna2.jpg</diffuse>
+                <height>savanna2_h.png</height>
+                <normal>savanna2_n.png</normal>
+            </lod>
+        </primitive>
+        <primitive name="grass">
+            <lod>
+                <diffuse>grass6.jpg</diffuse>
+                <height>grass6_h.png</height>
+                <normal>grass6_n.png</normal>
+            </lod>
+        </primitive>
+        <primitive name="forestfloor">
+            <lod>
+                <diffuse>forest3.jpg</diffuse>
+                <height>forest3_h.png</height>
+                <normal>forest3_n.png</normal>
+            </lod>
+        </primitive>
+        <primitive name="sand">
+            <lod>
+                <diffuse>sand.jpg</diffuse>
+                <height>sand_h.png</height>
+                <normal>sand_n.png</normal>
+            </lod>
+        </primitive>
+        <primitive name="tundra">
+            <lod>
+                <diffuse>tundra.jpg</diffuse>
+                <height>tundra_h.png</height>
+                <normal>tundra_n.png</normal>
+            </lod>
+        </primitive>
+    </primitives>
+
+    <classes>
+        <class name="water">
+            <layers>
+                <layer primitive="water">
+                </layer>
+            </layers>
+        </class>
+        <class name="tundra">
+            <layers>
+                <layer primitive="rock">
+                </layer>
+                <layer primitive="tundra">
+                    under(slope, 0.5, 0.4) * noise*2
+                </layer>
+            </layers>
+        </class>
+        <class name="forest">
+            <layers>
+                <layer primitive="forestfloor">
+                </layer>
+                <layer primitive="grass">
+                    (1.0-density)*noise
+                </layer>
+                <layer primitive="rock">
+                    over(slope, 0.5, 0.5)
+                </layer>
+            </layers>
+        </class>
+        <class name="grassland">
+            <layers>
+                <layer primitive="rock">
+                </layer>
+                <layer primitive="grass">
+                    under(slope, 0.4, 0.3) *
+                    under(elevation, 2500, 500) *
+                    under(curvature, 0.8, 0.1);
+                </layer>
+                <layer primitive="dirt">
+                    1.0-density;
+                </layer>
+            </layers>
+        </class>
+        <class name="cropland">
+            <layers>
+                <layer primitive="dirt">
+                </layer>
+                <layer primitive="grass">
+                    under(slope, 0.4, 0.3) *
+                    under(elevation, 2500, 500) *
+                    under(curvature, 0.8, 0.1) *
+                    density;
+                </layer>
+            </layers>
+        </class>
+        <class name="swamp">
+            <layers>
+                <layer primitive="water">
+                </layer>
+                <layer primitive="grass">
+                    under(slope, 0.4, 0.3) * density;
+                </layer>
+            </layers>
+        </class>
+        <class name="desert">
+            <layers>
+                <layer primitive="rock">
+                </layer>
+                <layer primitive="sand">
+                    under(slope, 0.3, 0.3) * density * noise*1.5;
+                </layer>
+            </layers>
+        </class>
+        <class name="barren">
+            <layers>
+                <layer primitive="rock">
+                </layer>
+                <layer primitive="dirt">
+                    1.0-density*noise
+                </layer>
+            </layers>
+        </class>
+        <class name="savanna">
+            <layers>
+                <layer primitive="dirt">
+                </layer>
+                <layer primitive="grass">
+                    (1.0-slope)*noise*1.5
+                </layer>
+                <layer primitive="tundra">
+                    over(elevation, 2900, 1000) * noise
+                </layer>
+            </layers>
+        </class>
+    </classes>
+</splat_catalog>

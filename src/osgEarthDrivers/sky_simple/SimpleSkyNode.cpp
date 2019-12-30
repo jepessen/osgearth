@@ -474,10 +474,18 @@ SimpleSkyNode::makeSceneLighting()
 
     if (_options.atmosphericLighting() == true)
     {
-        Shaders pkg;
-        pkg.load( vp, pkg.Ground_ONeil_Vert );
-        pkg.load( vp, pkg.Ground_ONeil_Frag );
-        OE_INFO << LC << "Using O'Neil atmospheric lighting\n";
+        Shaders shaders;
+
+        if (_options.usePBR() == true)
+        {
+            shaders.load(vp, shaders.Ground_PBR);
+            OE_INFO << LC << "Using PBR lighting\n";
+        }
+        else
+        {
+            shaders.load(vp, shaders.Ground_ONeil);
+            OE_INFO << LC << "Using O'Neil lighting\n";
+        }
     }
 
     else

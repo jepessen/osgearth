@@ -55,26 +55,48 @@ namespace osgEarth { namespace Splat
      * Defines a single splatting appearance that will be used if its
      * selector expression evaluates to true.
      */
-    struct OSGEARTHSPLAT_EXPORT SplatRangeData
+    struct OSGEARTHSPLAT_EXPORT SplatPrimitiveLOD
     {
-        optional<unsigned>        _maxLOD;
-        optional<URI>             _imageURI;
-        optional<URI>             _normalURI;
-        optional<URI>             _modelURI;
-        optional<int>             _modelCount;
-        optional<int>             _modelLevel;
-        optional<SplatDetailData> _detail;
+        optional<unsigned> _maxLevel;
+        optional<URI> _diffuseURI;
+        optional<URI> _heightURI;
+        optional<URI> _normalURI;
+        optional<URI> _smoothURI;
+        optional<URI> _roughURI;
+        optional<URI> _aoURI;
 
         // catalog will populate these values
-        int _diffuseTextureIndex;
-        int _materialTextureIndex;
+        int _textureAtlasIndex;
 
-        SplatRangeData();
-        SplatRangeData(const Config& conf);
+        SplatPrimitiveLOD();
+        SplatPrimitiveLOD(const Config& conf);
         Config getConfig() const;
     };
 
-    typedef std::vector<SplatRangeData> SplatRangeDataVector;
+    struct SplatPrimitiveLODVector : public std::vector<SplatPrimitiveLOD>
+    {
+        const SplatPrimitiveLOD* getLOD(int lod) const;
+    };
+
+    struct OSGEARTHSPLAT_EXPORT SplatPrimitive
+    {
+        SplatPrimitive() { }
+        SplatPrimitive(const Config& conf);
+        Config getConfig() const;
+        std::string _name;
+        SplatPrimitiveLODVector _lods;
+    };
+
+    typedef UnorderedMap<std::string, SplatPrimitive> SplatPrimitiveMap;
+
+    struct OSGEARTHSPLAT_EXPORT SplatClassLayer
+    {
+        SplatClassLayer(const Config&);
+        std::string _primitiveName;
+        std::string _glslExpression;
+    };
+
+    typedef std::vector<SplatClassLayer> SplatClassLayerVector;
 
     /**
      * A single splatting class. One class may have multiple
@@ -82,22 +104,24 @@ namespace osgEarth { namespace Splat
      */
     struct OSGEARTHSPLAT_EXPORT SplatClass
     {
-        std::string          _name;
-        SplatRangeDataVector _ranges;
+        std::string _name;
+        SplatClassLayerVector _layers;
 
         SplatClass();
         SplatClass(const Config& conf);
         Config getConfig() const;
     };
     
+    // SplatClass objects indexed by class name
     typedef osgEarth::UnorderedMap<std::string, SplatClass> SplatClassMap;
   
-    typedef osgEarth::UnorderedMap<std::string /*className*/, SplatRangeDataVector> SplatLUT;
+    typedef osgEarth::UnorderedMap<std::string /*className*/, SplatPrimitive*> SplatLUT;
 
     // Defines the splatting texture and associated lookup table.
     struct SplatTextureDef
     {
-        osg::ref_ptr<osg::Texture2DArray> _texture;
+        osg::ref_ptr<osg::Texture2DArray> _rgbhTextureAtlas;
+        osg::ref_ptr<osg::Texture2DArray> _materialTextureAtlas;
         SplatLUT                          _splatLUT;
         osg::ref_ptr<osg::Texture>        _splatLUTBuffer;
         void resizeGLObjectBuffers(unsigned maxSize);
@@ -111,32 +135,27 @@ namespace osgEarth { namespace Splat
     class OSGEARTHSPLAT_EXPORT SplatCatalog : public osg::Referenced
     {
     public:
-        /**
-         * Construct an empty catalog.
-         */
+        //! Construct an empty catalog
         SplatCatalog();
 
-        /**
-         * The splatting classifications set.
-         */
+        //! Splat classification data map
         const SplatClassMap& getClasses() const { return _classes; }
 
-        /**
-         * Whether the catalog is empty
-         */
+        const SplatClass* getClass(const std::string& name) const;
+
+        const SplatPrimitive* getPrimitive(const std::string& name) const;
+
+        //! Whether the catalog is empty
         bool empty() const { return _classes.empty(); }
 
-        /**
-         * Create a texture array from the images in the catalog, along
-         * with a definition of how to map classifications to texture
-         * array indices.
-         */        
+        //! Create a texture atlas from the catalog along with the 
+        //! necessary lookup tables
         bool createSplatTextureDef(const osgDB::Options* options,
                                    SplatTextureDef&      out);
 
     public: // properties
 
-        /** Name of this catalog */
+        //! Catalog name
         optional<std::string>& name() { return _name; }
         const optional<std::string>& name() const { return _name; }
 
@@ -163,7 +182,8 @@ namespace osgEarth { namespace Splat
         optional<int>         _version;
         optional<std::string> _name;
         optional<std::string> _description;
-        SplatClassMap         _classes;
+        SplatPrimitiveMap _primitives;
+        SplatClassMap _classes;
     };
 
 } } // namespace osgEarth::Splat

@@ -28,8 +28,8 @@ namespace osgEarth { namespace SimpleSky
         Shaders();
 		std::string Atmosphere_Vert;
 		std::string Atmosphere_Frag;
-        std::string Ground_ONeil_Vert;
-        std::string Ground_ONeil_Frag;
+        std::string Ground_ONeil;
+        std::string Ground_PBR;
         std::string Moon_Vert;
         std::string Moon_Frag;
         std::string Stars_Vert;

@@ -11,6 +11,7 @@ ENDIF(DYNAMIC_OSGEARTH)
 SET(LIB_NAME osgEarthSplat)
 
 set(TARGET_GLSL
+    SplatLayer.glsl
     Splat.types.glsl
     Splat.Noise.glsl
     Splat.vert.model.glsl

@@ -145,6 +145,7 @@ void oe_GroundCover_getBillboard(in int index, out oe_GroundCover_Billboard bb);
 
 // SDK import
 float oe_terrain_getElevation(in vec2);
+vec4 oe_terrain_getNormalAndCurvature();
 
 // Generated in GroundCover.cpp
 int oe_GroundCover_getBiomeIndex(in vec4);
@@ -155,10 +156,10 @@ uniform mat4 OE_GROUNDCOVER_MASK_MATRIX;
 #endif
 
 // Sample the elevation texture and move the vertex accordingly.
-void oe_GroundCover_clamp(inout vec4 vert_view, in vec3 up, in vec2 UV)
+void oe_GroundCover_clamp(inout vec4 vert_view, out float elevation, in vec3 up, in vec2 UV)
 {
-    float elev = oe_terrain_getElevation( UV );
-    vert_view.xyz += up*elev;
+    elevation = oe_terrain_getElevation( UV );
+    vert_view.xyz += up*elevation;
 }
 
 // Generate a wind-perturbation value
@@ -204,7 +205,8 @@ void oe_GroundCover_VS(inout vec4 vertex_view)
 #endif
 
     // Clamp the center point to the elevation.
-    oe_GroundCover_clamp(vertex_view, oe_UpVectorView, oe_layer_tilec.st);
+    float elevation;
+    oe_GroundCover_clamp(vertex_view, elevation, oe_UpVectorView, oe_layer_tilec.st);
 
     // Calculate the normalized camera range (oe_Camera.z = LOD Scale)
     float maxRange = oe_GroundCover_maxDistance / oe_Camera.z;
@@ -212,6 +214,13 @@ void oe_GroundCover_VS(inout vec4 vertex_view)
 
     // Distance culling:
     if ( nRange == 1.0 )
+        return;
+
+    vec4 n_and_c = oe_terrain_getNormalAndCurvature();
+    vec3 normalTangent = normalize(n_and_c.xyz*2.0-1.0);
+    float slope = 2.0*(1.0 - clamp(dot(normalTangent, gl_Normal), 0, 1));
+
+    if (slope > 0.4)
         return;
 
     // look up biome:

@@ -22,6 +22,7 @@
 #include "SplatLayer"
 #include "SplatShaders"
 #include "NoiseTextureFactory"
+#include "Surface"
 #include <osgEarth/VirtualProgram>
 #include <osgUtil/CullVisitor>
 #include <osg/BlendFunc>
@@ -30,9 +31,8 @@
 
 #define LC "[SplatLayer] " << getName() << ": "
 
-#define SPLAT_SAMPLER    "oe_splatTex"
-#define NOISE_SAMPLER    "oe_splat_noiseTex"
-#define LUT_SAMPLER      "oe_splat_coverageLUT"
+#define SPLAT_ATLAS_SAMPLER "oe_Splat_atlasTex"
+#define NOISE_SAMPLER "oe_Splat_noiseTex"
 
 using namespace osgEarth::Splat;
 
@@ -245,11 +245,6 @@ SplatLayer::buildStateSets()
         OE_DEBUG << LC << "buildStateSets deferred.. land cover dictionary not available\n";
         return;
     }
-    
-    //if (!getLandCoverLayer()) {
-    //    OE_DEBUG << LC << "buildStateSets deferred.. land cover layer not available\n";
-    //    return;
-    //}
 
     // Load all the splatting textures
     for (Zones::iterator z = _zones.begin(); z != _zones.end(); ++z)
@@ -280,10 +275,11 @@ SplatLayer::buildStateSets()
         const SplatTextureDef& texdef = zone->getSurface()->getTextureDef();
 
         // apply the splatting texture catalog:
-        zoneStateset->setTextureAttribute(_splatBinding.unit(), texdef._texture.get());
+        zoneStateset->setTextureAttribute(_splatBinding.unit(), texdef._rgbhTextureAtlas.get());
 
         // apply the buffer containing the coverage-to-splat LUT:
-        zoneStateset->setTextureAttribute(_lutBinding.unit(), texdef._splatLUTBuffer.get());
+        //zoneStateset->setTextureAttribute(_lutBinding.unit(), texdef._splatLUTBuffer.get());
+        installZoneShader(zone->getSurface()->getCatalog(), zoneStateset);
 
         OE_DEBUG << LC << "Installed getRenderInfo for zone \"" << zone->getName() << "\" (uid=" << zone->getUID() << ")\n";
     }
@@ -292,10 +288,11 @@ SplatLayer::buildStateSets()
     osg::StateSet* stateset = this->getOrCreateStateSet();
 
     // Bind the texture image unit:
-    stateset->addUniform(new osg::Uniform(SPLAT_SAMPLER, _splatBinding.unit()));
+    stateset->addUniform(new osg::Uniform(SPLAT_ATLAS_SAMPLER, _splatBinding.unit()));
+    stateset->setDefine("OE_SPLAT_ATLAS_TEX", SPLAT_ATLAS_SAMPLER);
 
     // install the uniform for the splat LUT.
-    stateset->addUniform(new osg::Uniform(LUT_SAMPLER, _lutBinding.unit()));
+    //stateset->addUniform(new osg::Uniform(LUT_SAMPLER, _lutBinding.unit()));
         
     if (_noiseBinding.valid())
     {
@@ -303,32 +300,100 @@ SplatLayer::buildStateSets()
         osg::ref_ptr<osg::Texture> noiseTexture = noise.create(256u, 1u);
         stateset->setTextureAttribute(_noiseBinding.unit(), noiseTexture.get());
         stateset->addUniform(new osg::Uniform(NOISE_SAMPLER, _noiseBinding.unit()));
-        stateset->setDefine("OE_SPLAT_NOISE_SAMPLER", NOISE_SAMPLER);
+        stateset->setDefine("OE_SPLAT_NOISE_TEX", NOISE_SAMPLER);
     }
 
-    stateset->addUniform(new osg::Uniform("oe_splat_scaleOffsetInt", 0));
-    stateset->addUniform(new osg::Uniform("oe_splat_noiseScale", 12.0f));
-    stateset->addUniform(new osg::Uniform("oe_splat_detailRange", 100000.0f));
-
-    if (_editMode)
-        stateset->setDefine("OE_SPLAT_EDIT_MODE");
-
-    if (_gpuNoise)
-        stateset->setDefine("OE_SPLAT_GPU_NOISE");
+    //stateset->addUniform(new osg::Uniform("oe_splat_scaleOffsetInt", 0));
+    //stateset->addUniform(new osg::Uniform("oe_splat_noiseScale", 12.0f));
+    //stateset->addUniform(new osg::Uniform("oe_splat_detailRange", 100000.0f));
 
     stateset->setDefine("OE_USE_NORMAL_MAP");
 
     SplattingShaders splatting;
     VirtualProgram* vp = VirtualProgram::getOrCreate(stateset);
     vp->setName("SplatLayer");
-    splatting.load(vp, splatting.VertModel);
-    splatting.load(vp, splatting.VertView);
-    splatting.load(vp, splatting.Frag);
-    splatting.load(vp, splatting.Util);
+    splatting.load(vp, splatting.SplatLayer);
+    //splatting.load(vp, splatting.VertModel);
+    //splatting.load(vp, splatting.VertView);
+    //splatting.load(vp, splatting.Frag);
+    //splatting.load(vp, splatting.Util);
 
     OE_DEBUG << LC << "Statesets built!! Ready!\n";
 }
 
+void
+SplatLayer::installZoneShader(const SplatCatalog* catalog, osg::StateSet* stateset) const
+{
+    std::stringstream buf;
+
+    buf << "#version " GLSL_VERSION_STR "\n"
+        << "#undef  under\n"
+        << "#define under(V,M,F) ((V)<=(M)?1.0:(V)>=(M)+(F)?0.0:clamp(((M)+(F)-(V))/(F),0,1))\n"
+        << "#undef  over\n"
+        << "#define over(V,M,F) ((V)>=(M)?1.0:(V)<=(M)-(F)?0.0:clamp(((V)-((M)-(F)))/(F),0,1))\n"
+        << "uniform float density; \n"
+        << "bool oe_Splat_resolve(in int code, in int lod, in float elevation, in float slope, in float curvature, in float noise, out float d[5]) {\n";
+
+    bool first = true;
+    for(SplatClassMap::const_iterator citer = catalog->getClasses().begin();
+        citer != catalog->getClasses().end();
+        ++citer)
+    {
+        const std::string& className = citer->first;
+        const LandCoverClass* lcClass = getLandCoverDictionary()->getClassByName(className);
+        if (lcClass)
+        {
+            if (!first) buf << "else ";
+            first = false;
+
+            buf << "if (code=="<<lcClass->getValue()<<") {\n";
+
+            const SplatClassLayerVector& layers = citer->second._layers;
+
+            const SplatPrimitive* prim;
+            
+            if (layers.size() > 0)
+            {
+                prim = catalog->getPrimitive(layers[0]._primitiveName);
+                buf << "d[0]=" << prim->_lods[0]._textureAtlasIndex << ";\n";
+
+                if (layers.size() > 1)
+                {
+                    prim = catalog->getPrimitive(layers[1]._primitiveName);
+                    buf << "d[1]=" << prim->_lods[0]._textureAtlasIndex << ";\n";
+                    buf << "d[2]=" << layers[1]._glslExpression << ";\n";
+
+                    if (layers.size() > 2)
+                    {
+                        prim = catalog->getPrimitive(layers[2]._primitiveName);
+                        buf << "d[3]=" << prim->_lods[0]._textureAtlasIndex << ";\n";
+                        buf << "d[4]=" << layers[2]._glslExpression << ";\n";
+                    }
+                    else
+                    {
+                        buf << "d[3]=-1; d[4]=0;\n";
+                    }
+                }
+                else
+                {
+                    buf << "d[1]=-1; d[2]=0; d[3]=-1; d[4]=0;\n";
+                }
+            }
+
+            buf << "return true;\n"
+                << "}\n";
+        }
+    }   
+
+    buf << "return false;\n";
+    buf << "}\n";
+
+    osg::Shader* shader = new osg::Shader(osg::Shader::FRAGMENT);
+    shader->setName("oe_Splat_resolve");
+    shader->setShaderSource(buf.str());
+    VirtualProgram* vp = VirtualProgram::getOrCreate(stateset);
+    vp->setShader(shader);
+}
 
 void
 SplatLayer::resizeGLObjectBuffers(unsigned maxSize)

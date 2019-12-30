@@ -13,6 +13,11 @@ in vec2 oe_GroundCover_texCoord;
 
 flat in float oe_GroundCover_atlasIndex; // from GroundCover.GS.glsl
 
+// stage globals
+float oe_roughness;
+float oe_ambientOcclusion;
+uniform float ao;
+
 void oe_GroundCover_fragment(inout vec4 color)
 {
     if (oe_GroundCover_atlasIndex < 0.0)
@@ -21,6 +26,9 @@ void oe_GroundCover_fragment(inout vec4 color)
     // modulate the texture
     color = texture(oe_GroundCover_billboardTex, vec3(oe_GroundCover_texCoord, oe_GroundCover_atlasIndex)) * color;
     color.rgb *= oe_GroundCover_exposure;
+
+    oe_roughness = ao;
+    oe_ambientOcclusion = 0.5;
     
     // if multisampling is off, use alpha-discard.
 #if !defined(OE_GROUNDCOVER_HAS_MULTISAMPLES) || defined(OE_IS_SHADOW_CAMERA)

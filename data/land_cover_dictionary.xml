@@ -8,16 +8,15 @@
     <version>1</version>
     <classes>
         <class name="no-data"/>
-        <class name="forest"/>
-        <class name="cropland"/>
-        <class name="grassland"/>
-        <class name="savanna"/>
-        <class name="swamp"/>
-        <class name="desert"/>
-        <class name="rock"/>
-        <class name="water"/>
-        <class name="tundra"/>
-        <class name="urban"/>
         <class name="asphalt"/>
+        <class name="urban"/>
+        <class name="tundra"/>
+        <class name="desert"/>
+        <class name="savanna"/>
+        <class name="forest"/>
+        <class name="grassland"/>
+        <class name="cropland"/>
+        <class name="swamp"/>
+        <class name="water"/>
     </classes>
 </LandCoverDictionary>
