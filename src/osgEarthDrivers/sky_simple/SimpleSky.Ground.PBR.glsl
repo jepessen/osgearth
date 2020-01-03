@@ -336,7 +336,7 @@ void atmos_fragment_main(inout vec4 color)
         vec3 H = normalize(V + L);
         //float distance = length(osg_LightSource[i].position.xyz);
         //float attenuation = 1.0 / (distance * distance);
-        vec3 radiance = osg_LightSource[i].diffuse.rgb * osg_LightSource[i].constantAttenuation;
+        vec3 radiance = osg_LightSource[i].diffuse.rgb * atmos_atten * osg_LightSource[i].constantAttenuation;
 
         // Cook-Torrance BRDF
         float NDF = oe_DistributionGGX(N, H, oe_roughness);   
@@ -379,6 +379,9 @@ void atmos_fragment_main(inout vec4 color)
 
     // exposure
     result = 1.0 - exp(-oe_sky_exposure * result);
+
+    // blend in the atmospheric color..?
+    result += atmos_color;
 
     color.rgb = clamp(result, 0, 1);
 }
