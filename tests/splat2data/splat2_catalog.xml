@@ -23,9 +23,14 @@
         </primitive>
         <primitive name="grass">
             <lod>
+                <diffuse>forest3.jpg</diffuse>
+                <height>forest3_h.png</height>
+                <normal>forest3_n.png</normal>
+                <!--
                 <diffuse>grass6.jpg</diffuse>
                 <height>grass6_h.png</height>
                 <normal>grass6_n.png</normal>
+                -->
             </lod>
         </primitive>
         <primitive name="forestfloor">

@@ -216,6 +216,7 @@ GroundCover::createShader() const
     billboardsBuf <<
         "struct oe_GroundCover_Billboard { \n"
         "    int atlasIndexSide; \n"
+        "    int atlasIndexSideMaterial; \n"
         "    int atlasIndexTop; \n"
         "    float width; \n"
         "    float height; \n"
@@ -277,6 +278,21 @@ GroundCover::createShader() const
                     }
                 }
 
+                int atlasSideMaterialIndex = -1;
+                if (bb->_sideMaterial.valid())
+                {
+                    ImageSet::iterator u = uniqueImages.find(bb->_sideMaterial.get());
+                    if (u != uniqueImages.end())
+                    {
+                        atlasSideMaterialIndex = u->second;
+                    }
+                    else
+                    {
+                        atlasSideMaterialIndex = nextAtlasIndex++;
+                        uniqueImages[bb->_sideMaterial.get()] = atlasSideMaterialIndex;
+                    }
+                }
+
                 int atlasTopIndex = -1;
                 if (bb->_topImage.valid())
                 {
@@ -299,7 +315,9 @@ GroundCover::createShader() const
 
                 billboardsBuf
                     << "    oe_GroundCover_Billboard("
-                    << atlasSideIndex << ", " << atlasTopIndex
+                    <<         atlasSideIndex
+                    << ", " << atlasSideMaterialIndex
+                    << ", " << atlasTopIndex
                     << ", float(" << symbol->width().get() << ")"
                     << ", float(" << symbol->height().get() << ")"
                     << ", float(" << symbol->sizeVariation().get() << ")"
@@ -508,6 +526,12 @@ GroundCover::createTexture() const
                     imagesToAdd.push_back(bb->_sideImage.get());
                     uniqueImages.insert(bb->_sideImage.get());
                 }
+
+                if (bb->_sideMaterial.valid() && uniqueImages.find(bb->_sideMaterial.get()) == uniqueImages.end())
+                {
+                    imagesToAdd.push_back(bb->_sideMaterial.get());
+                    uniqueImages.insert(bb->_sideMaterial.get());
+                }
             
                 if (bb->_topImage.valid() && uniqueImages.find(bb->_topImage.get()) == uniqueImages.end())
                 {
@@ -624,6 +648,54 @@ GroundCoverBiome::configure(const ConfigOptions& conf, const osgDB::Options* dbo
                 return false;
             }
 
+            // Next the side material map image composite (NNSA)
+            osg::ref_ptr<osg::Image> sideMaterialImage;
+
+            URI sideNormalMapURI(osgDB::getNameLessExtension(bs->url()->evalURI().full()) + "_n.png");
+            URI sideSmoothnessMapURI(osgDB::getNameLessExtension(bs->url()->evalURI().full()) + "_s.png");
+            URI sideAOMapURI(osgDB::getNameLessExtension(bs->url()->evalURI().full()) + "_a.png");
+            osg::ref_ptr<osg::Image> sideNormal = sideNormalMapURI.getImage();
+            osg::ref_ptr<osg::Image> sideSmooth = sideSmoothnessMapURI.getImage();
+            osg::ref_ptr<osg::Image> sideAO = sideAOMapURI.getImage();
+            if (sideNormal.valid() || sideSmooth.valid() || sideAO.valid())
+            {
+                sideMaterialImage = new osg::Image();
+                sideMaterialImage->allocateImage(sideNormal->s(), sideNormal->t(), 1, GL_RGBA, GL_UNSIGNED_BYTE);
+                //sideMaterialImage->setInternalTextureFormat(GL_RGBA8);
+
+                ImageUtils::PixelReader readNormal(sideNormal.get());
+                ImageUtils::PixelReader readSmooth(sideSmooth.get());
+                ImageUtils::PixelReader readAO(sideAO.get());
+                ImageUtils::PixelWriter writeMaterial(sideMaterialImage.get());
+
+                osg::Vec4 input, output;
+                for(int t=0; t<readNormal.t(); ++t)
+                {
+                    for(int s=0; s<readNormal.s(); ++s)
+                    {
+                        output.set(0.5, 0.5, 1.0, 0.5);
+                        if (sideNormal.valid())
+                        {
+                            readNormal(input, s, t);
+                            output.x() = input.x();
+                            output.y() = input.y();
+                        }
+                        if (sideSmooth.valid())
+                        {
+                            readSmooth(input, s, t);
+                            output.z() = input.r();
+                        }
+                        if (sideAO.valid())
+                        {
+                            readAO(input, s, t);
+                            output.w() = input.r();
+                        }
+
+                        writeMaterial(output, s, t);
+                    }
+                }
+            }
+
             // Next process the top image (optional)
             // Check for an actual instance in the symbol:
             osg::ref_ptr<osg::Image> topImage;
@@ -661,7 +733,7 @@ GroundCoverBiome::configure(const ConfigOptions& conf, const osgDB::Options* dbo
 
             if ( sideImage.valid() )
             {
-                getObjects().push_back( new GroundCoverBillboard(sideImage.get(), topImage.get(), bs) );
+                getObjects().push_back( new GroundCoverBillboard(sideImage.get(), sideMaterialImage.get(), topImage.get(), bs) );
             }
         } 
     }

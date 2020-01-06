@@ -118,6 +118,9 @@ out vec2 oe_GroundCover_texCoord;
 
 // Output that selects the land cover texture from the texture array (non interpolated)
 flat out float oe_GroundCover_atlasIndex;
+flat out float oe_GroundCover_atlasMaterialIndex;
+
+out vec3 oe_normalMapBinormal;
 
 struct oe_GroundCover_Biome {
     int firstObjectIndex;
@@ -136,6 +139,7 @@ void oe_GroundCover_getObject(in int index, out oe_GroundCover_Object object);
 
 struct oe_GroundCover_Billboard {
     int atlasIndexSide;
+    int atlasIndexSideMaterial;
     int atlasIndexTop;
     float width;
     float height;
@@ -241,6 +245,7 @@ void oe_GroundCover_VS(inout vec4 vertex_view)
     oe_GroundCover_getBillboard(object.objectArrayIndex, billboard);
 
     oe_GroundCover_atlasIndex = float(billboard.atlasIndexSide);
+    oe_GroundCover_atlasMaterialIndex = float(billboard.atlasIndexSideMaterial);
 
     // push the falloff closer to the max distance.
     float falloff = 1.0-(nRange*nRange*nRange);
@@ -343,6 +348,8 @@ void oe_GroundCover_VS(inout vec4 vertex_view)
                 mix( tangentVector, faceNormalVector, blend);
 
             oe_GroundCover_atlasIndex = float(billboard.atlasIndexSide);
+
+            oe_normalMapBinormal = tangentVector;
         }
     }
 
