@@ -52,6 +52,8 @@
                 <diffuse>tundra.jpg</diffuse>
                 <height>tundra_h.png</height>
                 <normal>tundra_n.png</normal>
+                <smoothness>tundra_s.png</smoothness>
+                <ao>tundra_s.png</ao>
             </lod>
         </primitive>
     </primitives>
@@ -68,7 +70,7 @@
                 <layer primitive="rock">
                 </layer>
                 <layer primitive="tundra">
-                    under(slope, 0.5, 0.4) * noise*2
+                    under(slope, density, noise*noise)
                 </layer>
             </layers>
         </class>
