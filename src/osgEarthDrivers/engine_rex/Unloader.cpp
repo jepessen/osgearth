@@ -63,6 +63,7 @@ namespace
 }
 
 //........................................................................
+//........................................................................
 
 
 #undef  LC
@@ -91,7 +92,7 @@ UnloaderGroup::traverse(osg::NodeVisitor& nv)
     {        
         if ( _parentKeys.size() > _threshold )
         {
-            ScopedMetric m("Unloader expire");
+            OE_PROFILING_ZONE_NAMED("Unloader expire");
 
             unsigned unloaded=0, notFound=0, notDormant=0;
             Threading::ScopedMutexLock lock( _mutex );

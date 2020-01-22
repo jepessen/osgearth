@@ -206,15 +206,21 @@ GroundCoverLayer::init()
 #endif
 
     _debug = (::getenv("OSGEARTH_GROUNDCOVER_DEBUG") != NULL);
+
+    installDefaultOpacityShader();
 }
 
 Status
 GroundCoverLayer::openImplementation()
 {
+    Status parent = PatchLayer::openImplementation();
+    if (parent.isError())
+        return parent;
+
     if (_renderer.valid())
         _renderer->_settings._grass = options().grass().get();
 
-    return PatchLayer::openImplementation();
+    return Status::OK();
 }
 
 void
@@ -358,7 +364,7 @@ namespace
 
             for(int j=0; j<biome->getObjects().size(); ++j)
             {
-                const GroundCoverObject* object = biome->getObjects()[j];
+				const GroundCoverObject* object = biome->getObjects()[j].get();
 
                 if (object->getType() == GroundCoverObject::TYPE_BILLBOARD)
                 {

@@ -18,6 +18,7 @@
  */
 #include "LayerDrawable"
 #include "TerrainRenderData"
+#include <osgEarth/Metrics>
 
 using namespace osgEarth::REX;
 
@@ -81,6 +82,7 @@ namespace
 void
 LayerDrawable::drawImplementation(osg::RenderInfo& ri) const
 {
+    OE_PROFILING_ZONE;
     //OE_INFO << LC << (_layer ? _layer->getName() : "[empty]") << " tiles=" << _tiles.size() << std::endl;
 
     // Get this context's state values:
@@ -106,12 +108,12 @@ LayerDrawable::drawImplementation(osg::RenderInfo& ri) const
 
     for (DrawTileCommands::const_iterator tile = _tiles.begin(); tile != _tiles.end(); ++tile)
     {
-        tile->draw(ri, *_drawState, layerData);
+        tile->draw(ri, *_drawState, layerData.get());
     }
 
     if (_patchLayer && _patchLayer->getDrawCallback())
     {
-        _patchLayer->getDrawCallback()->postDraw(ri, layerData);
+        _patchLayer->getDrawCallback()->postDraw(ri, layerData.get());
     }
 
     // If set, dirty all OSG state to prevent any leakage - this is sometimes

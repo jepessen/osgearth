@@ -202,13 +202,16 @@ BoundingVolume::getJSON() const
 osg::BoundingSphere
 BoundingVolume::asBoundingSphere() const
 {
-    const SpatialReference* epsg4979 = SpatialReference::get("epsg:4979");
-    if (!epsg4979)
+    // Note: this should be epsg:4979 according to the 3D-Tiles spec,
+    // but that only exists in very new versions of PROJ. For the
+    // purposes of osgEarth there's no difference anyway
+    const SpatialReference* srs = SpatialReference::get("epsg:4326");
+    if (!srs)
         return osg::BoundingSphere();
 
     if (region().isSet())
     {
-        GeoExtent extent(epsg4979,
+        GeoExtent extent(srs,
             osg::RadiansToDegrees(region()->xMin()),
             osg::RadiansToDegrees(region()->yMin()),
             osg::RadiansToDegrees(region()->xMax()),
@@ -420,7 +423,7 @@ ThreeDTileNode::ThreeDTileNode(ThreeDTilesetNode* tileset, Tile* tile, bool imme
         _children = new osg::Group;
         for (unsigned int i = 0; i < _tile->children().size(); ++i)
         {
-            _children->addChild(new ThreeDTileNode(_tileset, _tile->children()[i], false, _options.get()));
+            _children->addChild(new ThreeDTileNode(_tileset, _tile->children()[i].get(), false, _options.get()));
         }
 
         if (_children->getNumChildren() == 0)
@@ -498,7 +501,7 @@ namespace
                     osg::ref_ptr<Tileset> tileset = Tileset::create(rr.getString(), _uri.full());
                     if (tileset)
                     {
-                        tilesetNode = new ThreeDTilesetContentNode(parentTileset.get(), tileset, _options.get());
+                        tilesetNode = new ThreeDTilesetContentNode(parentTileset.get(), tileset.get(), _options.get());
                     }
                 }
                 _promise.resolve(tilesetNode.get());
@@ -527,7 +530,7 @@ namespace
         {
             if (threadPool.valid())
             {
-                threadPool->getQueue()->add(operation);
+                threadPool->getQueue()->add(operation.get());
             }
             else
             {
@@ -682,8 +685,50 @@ void ThreeDTileNode::traverse(osg::NodeVisitor& nv)
             }
         }
     }
+    else if (nv.getVisitorType() == nv.INTERSECTION_VISITOR)
+    {
+        resolveContent();
+        bool areChildrenReady = true;
+        if (_children.valid())
+        {
+            for (unsigned int i = 0; i < _children->getNumChildren(); i++)
+            {
+                osg::ref_ptr< ThreeDTileNode > childTile = dynamic_cast<ThreeDTileNode*>(_children->getChild(i));
+                if (childTile.valid())
+                {
+                    // Can we traverse the child?
+                    if (childTile->hasContent() && !childTile->isContentReady())
+                    {
+                        areChildrenReady = false;
+                    }
+                }
+            }
+        }
+        else
+        {
+            areChildrenReady = false;
+        }
 
-    osg::MatrixTransform::traverse(nv);
+        if (areChildrenReady && _children.valid() && _children->getNumChildren() > 0)
+        {
+            if (_content.valid() && _tile->refine().isSetTo(REFINE_ADD))
+            {
+                _content->accept(nv);
+            }
+
+            if (_children.valid())
+            {
+                _children->accept(nv);
+            }
+        }
+        else
+        {
+            if (_content.valid())
+            {
+                _content->accept(nv);
+            }
+        }
+    }
 }
 
 namespace {

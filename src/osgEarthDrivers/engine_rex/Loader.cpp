@@ -352,7 +352,7 @@ PagerLoader::traverse(osg::NodeVisitor& nv)
 
         // process pending merges.
         {
-            METRIC_BEGIN("loader.merge");
+            OE_PROFILING_ZONE_NAMED("loader.merge");
             int count;
             for(count=0; count < _mergesPerFrame && !_mergeQueue.empty(); ++count)
             {
@@ -368,12 +368,11 @@ PagerLoader::traverse(osg::NodeVisitor& nv)
 
                 _mergeQueue.erase( _mergeQueue.begin() );
             }
-            METRIC_END("loader.merge");
         }
 
         // cull finished requests.
         {
-            METRIC_SCOPED("loader.cull");
+            OE_PROFILING_ZONE("loader.cull");
 
             Threading::ScopedMutexLock lock( _requestsMutex );
 
@@ -506,7 +505,7 @@ PagerLoader::invokeAndRelease(UID requestUID)
         if ( REPORT_ACTIVITY )
             Registry::instance()->startActivity( request->getName() );
 
-        osg::ref_ptr<ProgressCallback> prog = new RequestProgressCallback(request);
+        osg::ref_ptr<ProgressCallback> prog = new RequestProgressCallback(request.get());
         request->invoke(prog.get());
     }
 
